@@ -1,5 +1,5 @@
 import streamlit as st
-from langchain_community.chat_models import ChatOllama
+from langchain_community.llms import Ollama
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import HumanMessage, AIMessage
 from langchain_community.document_loaders import WebBaseLoader
@@ -32,13 +32,12 @@ def get_vector_store(chunks):
 
 
 def get_context_retriever(vector_store):
-    llm = ChatOllama(model="llama2")
+    llm = Ollama(model="llama2")
     retriever = vector_store.as_retriever()
 
     prompt = ChatPromptTemplate.from_messages(
         [
             MessagesPlaceholder(variable_name="chat_history"),
-            MessagesPlaceholder(variable_name="context"),
             ("user", "{input}"),
             (
                 "user",
@@ -51,15 +50,14 @@ def get_context_retriever(vector_store):
 
 
 def get_conversation_rag_chain(retriever_chain):
-    llm = ChatOllama(model="llama2")
+    llm = Ollama(model="llama2")
     prompt = ChatPromptTemplate.from_messages(
         [
             (
                 "system",
-                "Answer the above conversation, generate a search query to look up to get information relevant to the conversation",
+                "Answer the above conversation, generate a search query to look up to get information relevant to the conversation:\n\n{context}",
             ),
             MessagesPlaceholder(variable_name="chat_history"),
-            MessagesPlaceholder(variable_name="context"),
             ("user", "{input}"),
         ]
     )
@@ -73,7 +71,6 @@ def get_response(user_input):
     response = conversation_rag_chain.invoke(
         {
             "chat_history": st.session_state.chat_history,
-            "context": st.session_state.vector_store,
             "input": user_input,
         }
     )
