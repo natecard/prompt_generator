@@ -1,5 +1,8 @@
 import streamlit as st
+from langchain_community.callbacks.streamlit import StreamlitCallbackHandler
+from langchain.memory import ConversationBufferMemory
 from langchain_community.llms import Ollama
+from langchain_community.chat_message_histories import StreamlitChatMessageHistory
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import HumanMessage, AIMessage
 from langchain_community.document_loaders import WebBaseLoader
@@ -9,6 +12,17 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain.chains import create_history_aware_retriever, create_retrieval_chain
 from transformers import AutoTokenizer
+from langchain.agents import AgentExecutor, ConversationalChatAgent
+from langchain.tools import Tool
+from langchain_community.tools import DuckDuckGoSearchRun
+
+msgs = StreamlitChatMessageHistory()
+memory = ConversationBufferMemory(
+    chat_memory=msgs,
+    return_messages=True,
+    memory_key="chat_history",
+    output_key="output",
+)
 
 
 def get_loader(url):
@@ -74,13 +88,44 @@ def get_response(user_input):
             "input": user_input,
         }
     )
+    if response["action"] == "ask_question":
+        user_query = st.chat_input(response["question"])
+        response = get_response(user_query)
     return response["answer"]
 
 
-st.set_page_config(page_title="LangChain", page_icon="🔗")
-st.title("LangChain")
+def get_agent_response(user_input):
+    rag_tool = Tool(
+        name="rag",
+        func=get_response,
+        description="Use the RAG model to retrieve relevant information from the URL",
+    )
 
-with st.sidebar:
+    llm = Ollama(model="llama2", streaming=True)
+    tools = [DuckDuckGoSearchRun(name="search"), rag_tool]
+    chat_agent = ConversationalChatAgent.from_llm_and_tools(llm=llm, tools=tools)
+
+    agent = AgentExecutor.from_agent_and_tools(
+        tools=tools,
+        agent=chat_agent,
+        llm=llm,
+        verbose=True,
+        memory=memory,
+        return_intermediate_steps=True,
+        handle_parsing_errors=True,
+    )
+
+    response = agent.run(
+        {"input": user_input, "chat_history": st.session_state.chat_history}
+    )
+    return response
+
+
+st.set_page_config(page_title="RAG Docs Chatbot", page_icon="🔗")
+st.title("RAG Docs Chatbot")
+chat_container = st.container()
+
+with chat_container:
     st.header("Setup")
     url = st.text_input("Enter URL to load documents")
     if url is None or url == "":
@@ -97,7 +142,7 @@ with st.sidebar:
 
         user_query = st.chat_input("Type your message here")
         if user_query is not None and user_query != "":
-            response = get_response(user_query)
+            response = get_agent_response(user_query)
             st.session_state.chat_history.append(HumanMessage(content=user_query))
             st.session_state.chat_history.append(AIMessage(content=response))
 
