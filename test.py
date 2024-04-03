@@ -1,3 +1,5 @@
+import getpass
+import os
 import streamlit as st
 from langchain_community.callbacks.streamlit import StreamlitCallbackHandler
 from langchain.memory import ConversationBufferMemory
@@ -17,6 +19,9 @@ from langchain.tools import Tool
 from clear_results import with_clear_container
 from langchain_community.tools import DuckDuckGoSearchRun
 from langchain_community.utilities import DuckDuckGoSearchAPIWrapper
+
+os.environ["LANGCHAIN_TRACING_V2"] = "true"
+os.environ["LANGCHAIN_API_KEY"] = getpass.getpass()
 
 # Set up memory
 msgs = StreamlitChatMessageHistory(key="chat_message_history")
@@ -166,11 +171,9 @@ with chat_container:
                 chunk_text(get_loader(url))
             )
 
-    user_query = st.chat_input("Type your message here")
-    if user_query is not None and user_query != "":
-        response = get_agent_response(user_query)
-        st.session_state.chat_history.append(HumanMessage(content=user_query))
-        st.session_state.chat_history.append(AIMessage(content=response))
+        # response = get_agent_response(user_query)
+        # st.session_state.chat_history.append(HumanMessage(content=user_query))
+        # st.session_state.chat_history.append(AIMessage(content=response))
 
     for message in st.session_state.chat_history:
         if isinstance(message, AIMessage):
@@ -185,9 +188,10 @@ with chat_container:
         st.chat_message(msg.type).write(msg.content)
 
     # If user inputs a new prompt, generate and draw a new response
-    if prompt := st.chat_input():
-        st.chat_message("human").write(prompt)
+    user_query = st.chat_input("Type your message here")
+    if user_query is not None and user_query != "":
+        st.chat_message("human").write(user_query)
         # Note: new messages are saved to history automatically by Langchain during run
         config = {"configurable": {"session_id": "any"}}
-        response = get_agent_response.invoke(user_query)
+        response = get_agent_response(user_query)
         st.chat_message("ai").write(response.content)
