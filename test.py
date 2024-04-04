@@ -19,7 +19,6 @@ from langchain.agents import AgentExecutor, ConversationalChatAgent
 from langchain.tools import Tool
 from langchain_community.utilities import DuckDuckGoSearchAPIWrapper
 from langchain_community.tools import DuckDuckGoSearchRun
-# from langchain_core.messages import HumanMessage, AIMessage
 
 from transformers import AutoTokenizer
 
@@ -53,6 +52,7 @@ memory = ConversationBufferMemory(
     memory_key="chat_history",
     output_key="output",
 )
+
 
 # Load the Ollama model and HF autotokenizer
 llm = Ollama(model="gemma")
@@ -120,7 +120,8 @@ def get_conversation_rag_chain(history_aware_retriever_chain):
     return create_retrieval_chain(history_aware_retriever_chain, document_chain)
 
 
-MAX_RECURSION_DEPTH = 5  # Set a reasonable limit for recursion depth
+# Set a reasonable limit for recursion depth
+MAX_RECURSION_DEPTH = 5
 
 
 def get_response(user_input, recursion_depth=0):
@@ -222,7 +223,8 @@ def get_regular_response(user_input, llm, memory):
     try:
         result = agent.invoke(
             input=user_input,
-            chat_history=memory.chat_memory.messages,  # Pass the chat history
+            # Pass the chat history
+            chat_history=memory.chat_memory.messages,
             tools=["rag"],
         )
         if "output" in result:
@@ -263,17 +265,17 @@ with chat_container:
         "Type your message here", on_submit=with_clear_container, args=(True,)
     )
     if user_query is not None and user_query != "":
-        msgs.add_user_message(user_query)  # Add user message to chat history
-        st.chat_message("user").write(user_query)  # Display user message in container
-
+        # Add user message to chat history
+        msgs.add_user_message(user_query)
+        # Display user message in container
+        st.chat_message("user").write(user_query)
         with st.spinner("Generating response..."):
             if "search" in user_query.lower():
                 response = get_search_response(user_query, llm, memory)
             else:
                 response = get_regular_response(user_query, llm, memory)
 
-        st.chat_message("assistant", avatar="🦜").write(
-            response
-        )  # Display AI response in container
-        print(f"Response after adding to chat history: {response}")  # Add this line
-        msgs.add_ai_message(response)  # Add AI response to chat history
+        # Display AI response in container
+        st.chat_message("assistant", avatar="🦜").write(response)
+        # Add AI response to chat history
+        msgs.add_ai_message(response)
