@@ -1,28 +1,26 @@
-from json import load
 import os
 import getpass
 from dotenv import load_dotenv
-
 import streamlit as st
+
 from langchain_community.callbacks.streamlit import StreamlitCallbackHandler
 from langchain.memory import ConversationBufferMemory
 from langchain_community.llms import Ollama
 from langchain_community.chat_message_histories import StreamlitChatMessageHistory
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-
 from langchain_community.document_loaders import WebBaseLoader
 from langchain_community.embeddings import OllamaEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain.chains import create_history_aware_retriever, create_retrieval_chain
-from transformers import AutoTokenizer
 from langchain.agents import AgentExecutor, ConversationalChatAgent
 from langchain.tools import Tool
+from langchain_community.utilities import DuckDuckGoSearchAPIWrapper
+from langchain_community.tools import DuckDuckGoSearchRun
 # from langchain_core.messages import HumanMessage, AIMessage
 
-# from langchain_community.tools import DuckDuckGoSearchRun
-from langchain_community.utilities import DuckDuckGoSearchAPIWrapper
+from transformers import AutoTokenizer
 
 from clear_results import with_clear_container
 
@@ -36,16 +34,19 @@ if not langsmith_api_key:
     langsmith_api_key = getpass("Enter your LangChain API key: ")
     os.environ["LANGSMITH_API_KEY"] = langsmith_api_key
 
+# Initiate streamlit page
+st.set_page_config(page_title="RAG Docs Chatbot", page_icon="🔗")
+st.title("RAG Docs Chatbot")
+
 # Set up memory
 msgs = StreamlitChatMessageHistory(key="chat_message_history")
 if len(msgs.messages) == 0:
     msgs.add_ai_message("How can I help you?")
+view_messages = st.expander("View Chat History")
 
-st.set_page_config(page_title="RAG Docs Chatbot", page_icon="🔗")
-st.title("RAG Docs Chatbot")
-
-view_messages = st.expander("View the message contents in session state")
+# Load the Ollama model and HF autotokenizer
 llm = Ollama(model="gemma")
+gemma_tokenizer = AutoTokenizer.from_pretrained("google/gemma-7b", token=hf_token)
 
 
 def get_loader(url):
@@ -56,7 +57,7 @@ def get_loader(url):
 
 def chunk_text(text):
     splitter = RecursiveCharacterTextSplitter.from_huggingface_tokenizer(
-        AutoTokenizer.from_pretrained("google/gemma-7b", token=hf_token),
+        gemma_tokenizer,
         chunk_size=400,
         chunk_overlap=40,
     )
@@ -88,9 +89,9 @@ def get_context_retriever(vector_store):
     just reformulate it if needed and otherwise return it as is."""
     contextualize_q_prompt = ChatPromptTemplate.from_messages(
         [
-            ("system", contextualize_q_system_prompt),
+            ("ai", contextualize_q_system_prompt),
             MessagesPlaceholder(variable_name="chat_history"),
-            ("user", "{input}"),
+            ("human", "{input}"),
         ]
     )
     history_aware_retriever_chain = create_history_aware_retriever(
@@ -109,9 +110,9 @@ def get_conversation_rag_chain(history_aware_retriever_chain):
 
     qa_prompt = ChatPromptTemplate.from_messages(
         [
-            ("system", qa_system_prompt),
+            ("ai", qa_system_prompt),
             MessagesPlaceholder(variable_name="chat_history"),
-            ("user", "{input}"),
+            ("human", "{input}"),
         ]
     )
     document_chain = create_stuff_documents_chain(llm, qa_prompt)
@@ -150,7 +151,7 @@ def get_agent_response(user_input):
         tools=tools,
         agent=chat_agent,
         llm=llm,
-        verbose=True,
+        verbose=False,
         memory=memory,
         return_intermediate_steps=True,
         handle_parsing_errors=True,
@@ -164,14 +165,18 @@ def get_agent_response(user_input):
     else:
         result = agent.invoke(
             input=user_input,
-            context=msgs.messages,
+            context=st.session_state.vector_store,
             tools=["rag"],
         )
 
-    if "output" in result:
-        return result["output"]
+    if "output" in result.lower():
+        response = result["output"]
+        print(f"Response from get_agent_response: {response}")  # Add this line
+        return response
     else:
-        return "\n".join(result["intermediate_steps"])
+        response = "\n".join(result["intermediate_steps"])
+        print(f"Response from get_agent_response: {response}")  # Add this line
+        return response
 
 
 chat_container = st.container()
@@ -197,18 +202,20 @@ with chat_container:
         elif msg.type == "ai":
             with st.chat_message("AI"):
                 st.write(msg.content)
+                print(f"Rendered message: {msg.content}")  # Add this line
 
     # If user inputs a new prompt, generate and draw a new response
-    user_query = st.chat_input("Type your message here")
+    user_query = st.chat_input(
+        "Type your message here", on_submit=with_clear_container, args=(True,)
+    )
     if user_query is not None and user_query != "":
-        # gemma_tokenizer = AutoTokenizer.from_pretrained("google/gemma-7b")
-        # text_splitter = SlidingWindowTextSplitter(
-        #     tokenizer=gemma_tokenizer.encode,  # Use the "gemma" tokenizer
-        #     chunk_size=1000,  # Maximum chunk size
-        #     stride=500,  # Overlap between chunks
-        # )
-
-        st.chat_message("Human").write(user_query)
-        # Note: new messages are saved to history automatically by Langchain during run
-        response = get_agent_response(user_query)
+        # msgs.add_human_message(user_query)  # Add user message to chat history
+        with st.spinner("Generating response..."):
+            response = get_agent_response(user_query)
+        with st.chat_message("AI"):
+            st.write(response)
+        print(f"Response before adding to chat history: {response}")  # Add this line
+        with st.chat_message("assistant"):
+            st.write(response)
+        print(f"Response after adding to chat history: {response}")  # Add this line
         msgs.add_ai_message(response)  # Add AI response to chat history
