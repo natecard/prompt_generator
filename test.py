@@ -1,6 +1,7 @@
 import logging
 import os
 import getpass
+from typing import List
 from dotenv import load_dotenv
 import streamlit as st
 
@@ -15,10 +16,11 @@ from langchain_community.vectorstores import FAISS
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain.chains import create_history_aware_retriever, create_retrieval_chain
+from langchain_core.pydantic_v1 import BaseModel, Field
 from langchain.agents import AgentExecutor, ConversationalChatAgent
-from langchain.tools import Tool
+from langchain.tools import Tool, BaseTool
 from langchain_community.utilities import DuckDuckGoSearchAPIWrapper
-# from langchain_community.tools import DuckDuckGoSearchRun
+from langchain_community.tools import DuckDuckGoSearchRun
 
 from transformers import AutoTokenizer
 
@@ -115,12 +117,21 @@ def get_conversation_rag_chain(history_aware_retriever_chain):
     qa_prompt = ChatPromptTemplate.from_messages(
         [
             ("ai", qa_system_prompt),
-            MessagesPlaceholder(variable_name="chat_history"),
+            MessagesPlaceholder("chat_history"),
             ("human", "{input}"),
         ]
     )
     document_chain = create_stuff_documents_chain(llm, qa_prompt)
     return create_retrieval_chain(history_aware_retriever_chain, document_chain)
+
+
+class Response(BaseModel):
+    """Final response to the question being asked"""
+
+    answer: str = Field(description="The final answer to respond to the user")
+    sources: List[int] = Field(
+        description="List of page chunks that contain answer to the question. Only include a page chunk if it contains relevant information"
+    )
 
 
 # Set a reasonable limit for recursion depth
@@ -182,7 +193,8 @@ def get_response(user_input, recursion_depth=0):
 
 
 # DuckDuckGo tool for searching the web
-search = DuckDuckGoSearchAPIWrapper()
+search_wrapper = DuckDuckGoSearchAPIWrapper(region="en-us", time="d", max_results=3)
+search = DuckDuckGoSearchRun(api_wrapper=search_wrapper)
 tools = [
     Tool(
         name="Search",
@@ -214,6 +226,8 @@ def get_search_response(user_input, llm, memory):
         memory=memory,
         return_intermediate_steps=True,
         handle_parsing_errors=True,
+        max_iterations=100,
+        max_execution_time=60,
     )
 
     try:
@@ -255,6 +269,8 @@ def get_regular_response(user_input, llm, memory):
         memory=memory,
         return_intermediate_steps=True,
         handle_parsing_errors=True,
+        max_iterations=100,
+        max_execution_time=60,
     )
 
     try:
