@@ -28,12 +28,13 @@ from clear_results import with_clear_container
 
 load_dotenv()
 os.environ["LANGCHAIN_TRACING_V2"] = "true"
-api_key = os.environ.get("LANGCHAIN_API_KEY")
+langsmith_api_key = os.environ.get("LANGSMITH_API_KEY")
+hf_token = os.environ.get("HF_TOKEN")
 
 # If the API key is not found in the environment, prompt the user to enter it
-if not api_key:
-    api_key = getpass("Enter your LangChain API key: ")
-    os.environ["LANGCHAIN_API_KEY"] = api_key
+if not langsmith_api_key:
+    langsmith_api_key = getpass("Enter your LangChain API key: ")
+    os.environ["LANGSMITH_API_KEY"] = langsmith_api_key
 
 # Set up memory
 msgs = StreamlitChatMessageHistory(key="chat_message_history")
@@ -55,7 +56,9 @@ def get_loader(url):
 
 def chunk_text(text):
     splitter = RecursiveCharacterTextSplitter.from_huggingface_tokenizer(
-        AutoTokenizer.from_pretrained("gpt2"), chunk_size=400, chunk_overlap=40
+        AutoTokenizer.from_pretrained("google/gemma-7b", token=hf_token),
+        chunk_size=400,
+        chunk_overlap=40,
     )
     chunks = splitter.split_documents(text)
     return chunks
@@ -67,8 +70,17 @@ def get_vector_store(chunks):
     return vector_store
 
 
+msgs = StreamlitChatMessageHistory()
+memory = ConversationBufferMemory(
+    chat_memory=msgs,
+    return_messages=True,
+    memory_key="chat_history",
+    output_key="output",
+)
+
+
 def get_context_retriever(vector_store):
-    # llm = Ollama(model="gemma")
+    llm = Ollama(model="gemma")
     retriever = vector_store.as_retriever()
     contextualize_q_system_prompt = """Given a chat history and the latest user question \
     which might reference context in the chat history, formulate a standalone question \
@@ -88,7 +100,7 @@ def get_context_retriever(vector_store):
 
 
 def get_conversation_rag_chain(history_aware_retriever_chain):
-    # llm = Ollama(model="gemma")
+    llm = Ollama(model="gemma")
 
     qa_system_prompt = """You are an assistant for question-answering and retrieval augmented tasks. \
         Use the following pieces of retrieved context to answer the question. \
@@ -111,7 +123,7 @@ def get_response(user_input):
     conversation_rag_chain = get_conversation_rag_chain(retriever_chain)
     response = conversation_rag_chain.invoke(
         {
-            "chat_history": st.session_state.chat_history,
+            "chat_history": msgs.messages,
             "input": user_input,
         }
     )
@@ -121,13 +133,6 @@ def get_response(user_input):
     return response["answer"]
 
 
-msgs = StreamlitChatMessageHistory()
-memory = ConversationBufferMemory(
-    chat_memory=msgs,
-    return_messages=True,
-    memory_key="chat_history",
-    output_key="output",
-)
 search = DuckDuckGoSearchAPIWrapper()
 tools = [
     Tool(
@@ -196,6 +201,13 @@ with chat_container:
     # If user inputs a new prompt, generate and draw a new response
     user_query = st.chat_input("Type your message here")
     if user_query is not None and user_query != "":
+        # gemma_tokenizer = AutoTokenizer.from_pretrained("google/gemma-7b")
+        # text_splitter = SlidingWindowTextSplitter(
+        #     tokenizer=gemma_tokenizer.encode,  # Use the "gemma" tokenizer
+        #     chunk_size=1000,  # Maximum chunk size
+        #     stride=500,  # Overlap between chunks
+        # )
+
         st.chat_message("Human").write(user_query)
         # Note: new messages are saved to history automatically by Langchain during run
         response = get_agent_response(user_query)
