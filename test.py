@@ -41,16 +41,16 @@ st.title("RAG Docs Chatbot")
 
 
 # Set up memory
-msgs = StreamlitChatMessageHistory(key="chat_message_history")
+msgs = StreamlitChatMessageHistory(key="chat_history")
 if len(msgs.messages) == 0:
-    msgs.add_ai_message("How can I help you?")
-view_messages = st.expander("View Chat History")
+    msgs.add_ai_message(
+        "How can I help you? You can ask me questions or search for information."
+    )
 
-msgs = StreamlitChatMessageHistory(key="chat_message_history")
 memory = ConversationBufferMemory(
     chat_memory=msgs,
     return_messages=True,
-    memory_key="chat_message_history",
+    memory_key="chat_history",
     output_key="output",
 )
 
@@ -82,7 +82,6 @@ def get_vector_store(chunks):
 
 
 def get_context_retriever(vector_store):
-    llm = Ollama(model="gemma")
     retriever = vector_store.as_retriever()
     # This should be able to retrieve the context from the chat history via the msgs.messages
     contextualize_q_system_prompt = """Given a chat history and the latest user question \
@@ -99,14 +98,12 @@ def get_context_retriever(vector_store):
         ]
     )
     history_aware_retriever_chain = create_history_aware_retriever(
-        llm, retriever, contextualize_q_prompt, memory
+        llm, retriever, contextualize_q_prompt
     )
     return history_aware_retriever_chain
 
 
 def get_conversation_rag_chain(history_aware_retriever_chain):
-    llm = Ollama(model="gemma")
-
     qa_system_prompt = """You are an assistant for question-answering and retrieval augmented tasks. \
         Use the following pieces of retrieved context to answer the question. \
         If you don't know the answer, just say that you don't know.\n\n\
@@ -160,12 +157,13 @@ def get_response(user_input, recursion_depth=0):
 
     # Check if the user input indicates a search intent
     elif "search" in user_input.lower():
-        search_results = get_search_response(user_input)
+        search_results = get_search_response(user_input, llm, memory)
         return f"Here are the search results for '{user_input}':\n\n{search_results}"
 
     # If no specific intent is detected, return the model's response
     else:
-        return response["answer"]
+        regular_response = get_regular_response(user_input, llm, memory)
+        return regular_response
 
 
 search = DuckDuckGoSearchAPIWrapper()
@@ -178,7 +176,7 @@ tools = [
 ]
 
 
-def get_search_response(user_input):
+def get_search_response(user_input, llm, memory):
     chat_agent = ConversationalChatAgent.from_llm_and_tools(llm=llm, tools=tools)
 
     agent = AgentExecutor.from_agent_and_tools(
@@ -208,7 +206,7 @@ def get_search_response(user_input):
     return response
 
 
-def get_regular_response(user_input):
+def get_regular_response(user_input, llm, memory):
     chat_agent = ConversationalChatAgent.from_llm_and_tools(llm=llm, tools=tools)
 
     agent = AgentExecutor.from_agent_and_tools(
@@ -224,7 +222,7 @@ def get_regular_response(user_input):
     try:
         result = agent.invoke(
             input=user_input,
-            context=msgs.messages,
+            chat_history=memory.chat_memory.messages,  # Pass the chat history
             tools=["rag"],
         )
         if "output" in result:
@@ -253,28 +251,29 @@ with chat_container:
                 chunk_text(get_loader(url))
             )
 
+    # Display existing chat history
+    for msg in msgs.messages:
+        if msg.type == "human":
+            st.chat_message(msg.type).write(msg.content)
+        else:
+            st.chat_message(msg.type, avatar="🦜").write(msg.content)
+
     # If user inputs a new prompt, generate and draw a new response
     user_query = st.chat_input(
         "Type your message here", on_submit=with_clear_container, args=(True,)
     )
     if user_query is not None and user_query != "":
         msgs.add_user_message(user_query)  # Add user message to chat history
+        st.chat_message("user").write(user_query)  # Display user message in container
+
         with st.spinner("Generating response..."):
             if "search" in user_query.lower():
-                response = get_search_response(user_query)
+                response = get_search_response(user_query, llm, memory)
             else:
-                response = get_regular_response(user_query)
-        with st.chat_message("AI"):
-            st.write(response)
+                response = get_regular_response(user_query, llm, memory)
+
+        st.chat_message("assistant", avatar="🦜").write(
+            response
+        )  # Display AI response in container
         print(f"Response after adding to chat history: {response}")  # Add this line
         msgs.add_ai_message(response)  # Add AI response to chat history
-
-    # Render messages from StreamlitChatMessageHistory
-    # for msg in msgs.messages:
-    #     if msg.type == "human":
-    #         with st.chat_message("Human"):
-    #             st.write(msg.content)
-    #     elif msg.type == "ai":
-    #         with st.chat_message("AI"):
-    #             st.write(response)
-    #             print(f"Rendered message: {msg.content}")  # Add this line
