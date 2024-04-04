@@ -1,3 +1,4 @@
+import logging
 import os
 import getpass
 from dotenv import load_dotenv
@@ -38,11 +39,20 @@ if not langsmith_api_key:
 st.set_page_config(page_title="RAG Docs Chatbot", page_icon="🔗")
 st.title("RAG Docs Chatbot")
 
+
 # Set up memory
 msgs = StreamlitChatMessageHistory(key="chat_message_history")
 if len(msgs.messages) == 0:
     msgs.add_ai_message("How can I help you?")
 view_messages = st.expander("View Chat History")
+
+msgs = StreamlitChatMessageHistory(key="chat_message_history")
+memory = ConversationBufferMemory(
+    chat_memory=msgs,
+    return_messages=True,
+    memory_key="chat_message_history",
+    output_key="output",
+)
 
 # Load the Ollama model and HF autotokenizer
 llm = Ollama(model="gemma")
@@ -69,15 +79,6 @@ def get_vector_store(chunks):
     embeddings = OllamaEmbeddings()
     vector_store = FAISS.from_documents(chunks, embeddings)
     return vector_store
-
-
-msgs = StreamlitChatMessageHistory(key="chat_message_history")
-memory = ConversationBufferMemory(
-    chat_memory=msgs,
-    return_messages=True,
-    memory_key="chat_message_history",
-    output_key="output",
-)
 
 
 def get_context_retriever(vector_store):
@@ -159,7 +160,7 @@ def get_response(user_input, recursion_depth=0):
 
     # Check if the user input indicates a search intent
     elif "search" in user_input.lower():
-        search_results = get_agent_response(user_input)
+        search_results = get_search_response(user_input)
         return f"Here are the search results for '{user_input}':\n\n{search_results}"
 
     # If no specific intent is detected, return the model's response
@@ -177,7 +178,7 @@ tools = [
 ]
 
 
-def get_agent_response(user_input):
+def get_search_response(user_input):
     chat_agent = ConversationalChatAgent.from_llm_and_tools(llm=llm, tools=tools)
 
     agent = AgentExecutor.from_agent_and_tools(
@@ -190,25 +191,51 @@ def get_agent_response(user_input):
         handle_parsing_errors=True,
     )
 
-    if "search" in user_input.lower():
+    try:
         result = agent.run(
             user_input, search_quality_reflection=True, search_quality_score_threshold=4
         )
-    else:
+        if "output" in result:
+            response = result["output"]
+        else:
+            response = (
+                "I'm sorry, I couldn't find a satisfactory answer to your search query."
+            )
+    except Exception as e:
+        logging.error(f"Error occurred while processing search query: {e}")
+        response = "I'm sorry, an error occurred while processing your search query. Please try again later."
+
+    return response
+
+
+def get_regular_response(user_input):
+    chat_agent = ConversationalChatAgent.from_llm_and_tools(llm=llm, tools=tools)
+
+    agent = AgentExecutor.from_agent_and_tools(
+        tools=tools,
+        agent=chat_agent,
+        llm=llm,
+        verbose=False,
+        memory=memory,
+        return_intermediate_steps=True,
+        handle_parsing_errors=True,
+    )
+
+    try:
         result = agent.invoke(
             input=user_input,
             context=msgs.messages,
             tools=["rag"],
         )
+        if "output" in result:
+            response = result["output"]
+        else:
+            response = "I'm sorry, I couldn't find a satisfactory answer to your query."
+    except Exception as e:
+        logging.error(f"Error occurred while processing regular query: {e}")
+        response = "I'm sorry, an error occurred while processing your query. Please try again later."
 
-    if "output" in result:
-        response = result["output"]
-        print(f"Response from get_agent_response: {response}")  # Add this line
-        return response
-    else:
-        response = "\n".join(result["intermediate_steps"])
-        print(f"Response from get_agent_response: {response}")  # Add this line
-        return response
+    return response
 
 
 chat_container = st.container()
@@ -231,9 +258,12 @@ with chat_container:
         "Type your message here", on_submit=with_clear_container, args=(True,)
     )
     if user_query is not None and user_query != "":
-        # msgs.add_human_message(user_query)  # Add user message to chat history
+        msgs.add_user_message(user_query)  # Add user message to chat history
         with st.spinner("Generating response..."):
-            response = get_agent_response(user_query)
+            if "search" in user_query.lower():
+                response = get_search_response(user_query)
+            else:
+                response = get_regular_response(user_query)
         with st.chat_message("AI"):
             st.write(response)
         print(f"Response after adding to chat history: {response}")  # Add this line
