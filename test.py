@@ -1,12 +1,15 @@
-import getpass
+from json import load
 import os
+import getpass
+from dotenv import load_dotenv
+
 import streamlit as st
 from langchain_community.callbacks.streamlit import StreamlitCallbackHandler
 from langchain.memory import ConversationBufferMemory
 from langchain_community.llms import Ollama
 from langchain_community.chat_message_histories import StreamlitChatMessageHistory
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_core.messages import HumanMessage, AIMessage
+
 from langchain_community.document_loaders import WebBaseLoader
 from langchain_community.embeddings import OllamaEmbeddings
 from langchain_community.vectorstores import FAISS
@@ -16,12 +19,21 @@ from langchain.chains import create_history_aware_retriever, create_retrieval_ch
 from transformers import AutoTokenizer
 from langchain.agents import AgentExecutor, ConversationalChatAgent
 from langchain.tools import Tool
-from clear_results import with_clear_container
-from langchain_community.tools import DuckDuckGoSearchRun
+# from langchain_core.messages import HumanMessage, AIMessage
+
+# from langchain_community.tools import DuckDuckGoSearchRun
 from langchain_community.utilities import DuckDuckGoSearchAPIWrapper
 
+from clear_results import with_clear_container
+
+load_dotenv()
 os.environ["LANGCHAIN_TRACING_V2"] = "true"
-os.environ["LANGCHAIN_API_KEY"] = getpass.getpass()
+api_key = os.environ.get("LANGCHAIN_API_KEY")
+
+# If the API key is not found in the environment, prompt the user to enter it
+if not api_key:
+    api_key = getpass("Enter your LangChain API key: ")
+    os.environ["LANGCHAIN_API_KEY"] = api_key
 
 # Set up memory
 msgs = StreamlitChatMessageHistory(key="chat_message_history")
@@ -32,7 +44,7 @@ st.set_page_config(page_title="RAG Docs Chatbot", page_icon="🔗")
 st.title("RAG Docs Chatbot")
 
 view_messages = st.expander("View the message contents in session state")
-llm = Ollama(model="llama2")
+llm = Ollama(model="gemma")
 
 
 def get_loader(url):
@@ -56,7 +68,7 @@ def get_vector_store(chunks):
 
 
 def get_context_retriever(vector_store):
-    # llm = Ollama(model="llama2")
+    # llm = Ollama(model="gemma")
     retriever = vector_store.as_retriever()
     contextualize_q_system_prompt = """Given a chat history and the latest user question \
     which might reference context in the chat history, formulate a standalone question \
@@ -76,7 +88,7 @@ def get_context_retriever(vector_store):
 
 
 def get_conversation_rag_chain(history_aware_retriever_chain):
-    # llm = Ollama(model="llama2")
+    # llm = Ollama(model="gemma")
 
     qa_system_prompt = """You are an assistant for question-answering and retrieval augmented tasks. \
         Use the following pieces of retrieved context to answer the question. \
@@ -123,11 +135,6 @@ tools = [
         func=search.run,
         description="Use the DuckDuckGo search engine to find information",
     ),
-    Tool(
-        name="rag",
-        func=get_response,
-        description="Use the RAG model to retrieve relevant information from the URL",
-    ),
 ]
 
 
@@ -144,7 +151,17 @@ def get_agent_response(user_input):
         handle_parsing_errors=True,
     )
 
-    result = agent.invoke(input=user_input, context=memory.chat_memory)
+    # Check if the user input contains a specific keyword or pattern that indicates a web search is needed
+    if "search" in user_input.lower():
+        result = agent.run(
+            user_input, search_quality_reflection=True, search_quality_score_threshold=4
+        )
+    else:
+        result = agent.invoke(
+            input=user_input,
+            context=msgs.messages,
+            tools=["rag"],
+        )
 
     if "output" in result:
         return result["output"]
@@ -162,36 +179,24 @@ with st.sidebar:
 with chat_container:
     st_cb = StreamlitCallbackHandler(st.container(), expand_new_thoughts=False)
     if url is not None and url != "":
-        if "chat_history" not in st.session_state:
-            st.session_state.chat_history = [
-                AIMessage(content="Hello, I am a bot. How can I help you?"),
-            ]
         if "vector_store" not in st.session_state:
             st.session_state.vector_store = get_vector_store(
                 chunk_text(get_loader(url))
             )
 
-        # response = get_agent_response(user_query)
-        # st.session_state.chat_history.append(HumanMessage(content=user_query))
-        # st.session_state.chat_history.append(AIMessage(content=response))
-
-    for message in st.session_state.chat_history:
-        if isinstance(message, AIMessage):
-            with st.chat_message("AI"):
-                st.write(message.content)
-        elif isinstance(message, HumanMessage):
-            with st.chat_message("Human"):
-                st.write(message.content)
-
-    # Render current messages from StreamlitChatMessageHistory
+    # Render messages from StreamlitChatMessageHistory
     for msg in msgs.messages:
-        st.chat_message(msg.type).write(msg.content)
+        if msg.type == "human":
+            with st.chat_message("Human"):
+                st.write(msg.content)
+        elif msg.type == "ai":
+            with st.chat_message("AI"):
+                st.write(msg.content)
 
     # If user inputs a new prompt, generate and draw a new response
     user_query = st.chat_input("Type your message here")
     if user_query is not None and user_query != "":
-        st.chat_message("human").write(user_query)
+        st.chat_message("Human").write(user_query)
         # Note: new messages are saved to history automatically by Langchain during run
-        config = {"configurable": {"session_id": "any"}}
         response = get_agent_response(user_query)
-        st.chat_message("ai").write(response.content)
+        msgs.add_ai_message(response)  # Add AI response to chat history
