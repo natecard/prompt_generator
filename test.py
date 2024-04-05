@@ -342,6 +342,9 @@ with st.sidebar:
     url = st.text_input("Enter URL to load documents")
     if url is None or url == "":
         st.info("Please enter a URL to load documents")
+    else:
+        # Initialize the vector store and chains
+        conversation_rag_chain = run_conversation(url)
 
 with chat_container:
     st_cb = StreamlitCallbackHandler(st.container(), expand_new_thoughts=False)
@@ -366,7 +369,7 @@ with chat_container:
             if "search" in user_query.lower():
                 response = get_search_response(user_query, llm, memory)
             else:
-                conversation_rag_chain = run_conversation(url)
+                # Use the initialized conversation_rag_chain
                 response = get_regular_response(
                     user_query, conversation_rag_chain, memory
                 )
