@@ -1,6 +1,7 @@
 import logging
 import os
 import getpass
+
 from typing import List
 from dotenv import load_dotenv
 import streamlit as st
@@ -13,13 +14,12 @@ from langchain_community.chat_message_histories import StreamlitChatMessageHisto
 from langchain_community.document_loaders import WebBaseLoader
 from langchain_community.embeddings import OllamaEmbeddings
 from langchain_community.llms import Ollama
-
+from langchain_community.chat_models import ChatOllama
 from langchain_community.tools import DuckDuckGoSearchResults
 from langchain_community.utilities import DuckDuckGoSearchAPIWrapper
 from langchain_community.vectorstores import FAISS
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
-# from langchain_experimental import smart_llm
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.pydantic_v1 import BaseModel, Field
 from langchain.memory import ConversationBufferMemory
@@ -37,7 +37,7 @@ langsmith_api_key = os.environ.get("LANGSMITH_API_KEY")
 hf_token = os.environ.get("HF_TOKEN")
 
 # Load the Ollama model and HF autotokenizer
-llm = Ollama(model="qwen:14b")
+llm = ChatOllama(model="qwen:14b")
 tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen1.5-14B", token=hf_token)
 
 # If the API key is not found in the environment, prompt the user to enter it
@@ -46,8 +46,8 @@ if not langsmith_api_key:
     os.environ["LANGSMITH_API_KEY"] = langsmith_api_key
 
 # Initiate streamlit page
-st.set_page_config(page_title="RAG Docs Chatbot", page_icon="🔗")
-st.title("RAG Docs Chatbot")
+st.set_page_config(page_title="RAG Chatbot", page_icon="🔗")
+st.title("RAG Chatbot")
 
 
 # Set up memory
@@ -116,7 +116,7 @@ def get_conversation_rag_chain(history_aware_retriever_chain):
     qa_system_prompt = """You are an assistant for question-answering and retrieval augmented tasks. \
         Use the following pieces of retrieved context to answer the question. \
         If you don't know the answer, just say that you don't know.\n\n\
-        {context}"""
+        """
 
     qa_prompt = ChatPromptTemplate.from_messages(
         [
@@ -126,7 +126,9 @@ def get_conversation_rag_chain(history_aware_retriever_chain):
         ]
     )
     document_chain = create_stuff_documents_chain(llm, qa_prompt)
-    return create_retrieval_chain(history_aware_retriever_chain, document_chain)
+    return create_retrieval_chain(
+        retriever=history_aware_retriever_chain, combine_docs_chain=document_chain
+    )
 
 
 class Response(BaseModel):
@@ -150,6 +152,22 @@ class ConversationRAGTool(BaseTool):
     def _arun(self, query, chat_history):
         """Use the tool asynchronously."""
         raise NotImplementedError("This tool does not support async")
+
+
+def conversation_rag_tool_func(query, chat_history):
+    """Wrapper function to call the ConversationRAGTool."""
+    tool = ConversationRAGTool()
+    return tool._run(query, chat_history)
+
+
+# Set up the RAG tool
+rag_tools = [
+    Tool(
+        name="rag",
+        func=conversation_rag_tool_func,
+        description="Utilize a RAG model to generate responses to user queries",
+    ),
+]
 
 
 def run_conversation(url):
@@ -208,6 +226,10 @@ def get_response(user_input, recursion_depth=0):
             "input": user_input,
         }
     )
+    # Uncomment if using the chain directly
+    # output_parser = AgentOutputParser()
+    # chain = retriever_chain | conversation_rag_chain | user_input | llm | output_parser
+    # chain.invoke()
 
     # Check if the model is asking for clarification or a follow-up question
     if "ask_question" in response:
@@ -217,24 +239,14 @@ def get_response(user_input, recursion_depth=0):
         return AgentOutputParser(question_response).abatch()
 
     # Check if the user input indicates a search intent
-    elif "search" in user_input.lower():
+    else:
         search_results = get_search_response(user_input, llm, memory)
         return f"Here are the search results for '{user_input}':\n\n{search_results}"
 
-    # If no specific intent is detected, return the model's response
-    else:
-        regular_response = get_regular_response(user_input, llm, memory)
-        return AgentOutputParser(regular_response).abatch()
-
-
-# Set up the RAG tool
-rag_tools = [
-    Tool(
-        name="rag",
-        func=ConversationRAGTool.run,
-        description="Utilize a RAG model to generate responses to user queries",
-    ),
-]
+    # # If no specific intent is detected, return the model's response
+    # else:
+    #     regular_response = get_regular_response(user_input, llm, memory)
+    #     return AgentOutputParser(regular_response).abatch()
 
 
 # Set up the DuckDuckGo search tool
@@ -277,9 +289,8 @@ def get_search_response(user_input, llm, memory):
         max_execution_time=60,
         output_parser=StrOutputParser(),
     )
-
     try:
-        result = agent.run(
+        result = agent.invoke(
             user_input, search_quality_reflection=True, search_quality_score_threshold=4
         )
         if "output" in result:
@@ -295,45 +306,42 @@ def get_search_response(user_input, llm, memory):
     return response
 
 
-def get_regular_response(user_input, llm, memory):
-    """
-    Get a regular response from the chat agent.
+# def get_regular_response(user_input, llm, memory):
+#     """
+#     Get a regular response from the chat agent.
 
-    Args:
-        user_input (str): The user's input/query.
-        llm: The language model used by the chat agent.
-        memory: The memory object used to store chat history.
+#     Args:
+#         user_input (str): The user's input/query.
+#         llm: The language model used by the chat agent.
+#         memory: The memory object used to store chat history.
 
-    Returns:
-        str: The response generated by the chat agent.
-    """
-    chat_agent = ConversationalChatAgent.from_llm_and_tools(llm=llm, tools=rag_tools)
+#     Returns:
+#         str: The response generated by the chat agent.
+#     """
+#     chat_agent = ConversationalChatAgent.from_llm_and_tools(llm=llm, tools=rag_tools)
 
-    agent = AgentExecutor.from_agent_and_tools(
-        tools=rag_tools,
-        agent=chat_agent,
-        llm=llm,
-        verbose=False,
-        memory=memory,
-        return_intermediate_steps=True,
-        handle_parsing_errors=True,
-        max_iterations=100,
-        max_execution_time=60,
-        output_parser=StrOutputParser(),
-    )
+#     agent = AgentExecutor.from_agent_and_tools(
+#         tools=rag_tools,
+#         agent=chat_agent,
+#         llm=llm,
+#         verbose=False,
+#         memory=memory,
+#         return_intermediate_steps=True,
+#         handle_parsing_errors=True,
+#         max_iterations=100,
+#         max_execution_time=60,
+#         output_parser=StrOutputParser(),
+#     )
 
-    try:
-        result = agent.invoke(
-            input=user_input,
-            chat_history=memory.chat_memory.messages,
-            tools=["conversation_rag"],
-        )
-        response = result["output"]
-    except Exception as e:
-        logging.error(f"Error occurred while processing regular query: {e}")
-        response = "I'm sorry, an error occurred while processing your query. Please try again later."
+#     try:
+#         input_data = {"chat_history": memory.chat_memory.messages, "input": user_input}
+#         result = agent.run(input=input_data, tools=rag_tools)
+#         response = result["output"]
+#     except Exception as e:
+#         logging.error(f"Error occurred while processing regular query: {e}")
+#         response = "I'm sorry, an error occurred while processing your query. Please try again later."
 
-    return response
+#     return response
 
 
 chat_container = st.container()
@@ -353,12 +361,13 @@ with chat_container:
     for msg in msgs.messages:
         if msg.type == "human":
             st.chat_message(msg.type).write(msg.content)
-        else:
-            st.chat_message(msg.type, avatar="🦜").write(msg.content)
+        elif msg.type == "ai":
+            st.chat_message(msg.type).write(msg.content)
 
     # If user inputs a new prompt, generate and draw a new response
     user_query = st.chat_input(
-        "Type your message here", on_submit=with_clear_container, args=(True,)
+        "Type your message here",
+        # on_submit=with_clear_container, args=(True,)
     )
     if user_query is not None and user_query != "":
         # Add user message to chat history
@@ -366,15 +375,15 @@ with chat_container:
         # Display user message in container
         st.chat_message("user").write(user_query)
         with st.spinner("Generating response..."):
-            if "search" in user_query.lower():
-                response = get_search_response(user_query, llm, memory)
-            else:
-                # Use the initialized conversation_rag_chain
-                response = get_regular_response(
-                    user_query, conversation_rag_chain, memory
-                )
+            # if "search" in user_query.lower():
+            response = get_search_response(user_query, llm, memory)
+        # else:
+        #     # Use the initialized conversation_rag_chain
+        #     response = get_regular_response(
+        #         user_query, conversation_rag_chain, memory
+        #     )
 
-        # Display AI response in container
-        st.chat_message("assistant", avatar="🦜").write(response)
         # Add AI response to chat history
         msgs.add_ai_message(response)
+        # Display AI response in container
+        st.chat_message("assistant", avatar="🦜").write(response)
