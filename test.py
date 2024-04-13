@@ -2,6 +2,7 @@ import logging
 import os
 import getpass
 
+from tabnanny import verbose
 from typing import List
 from dotenv import load_dotenv
 import streamlit as st
@@ -175,13 +176,12 @@ rag_tools = [
 ]
 
 
-def run_conversation(url):
-    if url is not None and url != "":
-        if "vector_store" not in st.session_state:
+def run_conversation(url=None):
+    if "vector_store" not in st.session_state:
+        if url is not None and url != "":
             docs = get_loader(url)
             chunks = chunk_text(docs)
             st.session_state.vector_store = get_vector_store(chunks)
-
         # history_aware_retriever_chain = get_context_retriever(
         #     st.session_state.vector_store
         # )
@@ -189,73 +189,79 @@ def run_conversation(url):
         #     history_aware_retriever_chain
         # )
         # return conversation_rag_chain
+    else:
+        url = "https://en.wikipedia.org/wiki/Main_Page"
+        docs = get_loader(url)
+        chunks = chunk_text(docs)
+        st.session_state.vector_store = get_vector_store(chunks)
 
 
 # Set a reasonable limit for recursion depth
 MAX_RECURSION_DEPTH = 5
 
 
-def get_response(user_input, recursion_depth=0):
-    """
-    Generates a response based on the user input using the conversation RAG model.
+# def get_response(user_input, recursion_depth=0, url=None):
+# """
+# Generates a response based on the user input using the conversation RAG model.
 
-    Args:
-        user_input (str): The user's input.
-        recursion_depth (int, optional): The recursion depth to prevent infinite loops. Defaults to 0.
+# Args:
+#     user_input (str): The user's input.
+#     recursion_depth (int, optional): The recursion depth to prevent infinite loops. Defaults to 0.
 
-    Returns:
-        str: The generated response.
+# Returns:
+#     str: The generated response.
 
-    Raises:
-        None
+# Raises:
+#     None
 
-    Notes:
-        - If the recursion depth exceeds the limit, a default error message is returned.
-        - The function uses the conversation RAG model to generate a response based on the user input.
-        - If the model asks for clarification or a follow-up question, the user is prompted for input.
-        - If the user input indicates a search intent, search results are returned.
-        - If no specific intent is detected, the model's response is returned.
-    """
-    # Check if the recursion depth has exceeded the limit
-    if recursion_depth >= MAX_RECURSION_DEPTH:
-        return "I'm sorry, I'm having trouble understanding your query. Could you please rephrase it or provide more context?"
+# Notes:
+#     - If the recursion depth exceeds the limit, a default error message is returned.
+#     - The function uses the conversation RAG model to generate a response based on the user input.
+#     - If the model asks for clarification or a follow-up question, the user is prompted for input.
+#     - If the user input indicates a search intent, search results are returned.
+#     - If no specific intent is detected, the model's response is returned.
+# """
+# run_conversation(url)
+# # Check if the recursion depth has exceeded the limit
+# if recursion_depth >= MAX_RECURSION_DEPTH:
+#     return "I'm sorry, I'm having trouble understanding your query. Could you please rephrase it or provide more context?"
 
-    # Get the context retriever chain and conversation RAG chain
-    retriever_chain = get_context_retriever(st.session_state.vector_store)
-    conversation_rag_chain = get_conversation_rag_chain(retriever_chain)
+# # Get the context retriever chain and conversation RAG chain
+# retriever_chain = get_context_retriever(st.session_state.vector_store)
+# conversation_rag_chain = get_conversation_rag_chain(retriever_chain)
 
-    # Generate response using the conversation RAG model
-    response = conversation_rag_chain.invoke(
-        {
-            # "chat_history": msgs.messages,
-            "input": user_input,
-        }
-    )
-    # Uncomment if using the chain directly
-    # output_parser = AgentOutputParser()
-    # chain = retriever_chain | conversation_rag_chain | user_input | llm | output_parser
-    # chain.invoke()
+# # Generate response using the conversation RAG model
+# response = conversation_rag_chain.invoke(
+#     {
+#         # "chat_history": msgs.messages,
+#         "input": user_input,
+#     }
+# )
+# Uncomment if using the chain directly
+# output_parser = AgentOutputParser()
+# chain = retriever_chain | conversation_rag_chain | user_input | llm | output_parser
+# chain.invoke()
 
-    # Check if the model is asking for clarification or a follow-up question
-    if "ask_question" in response:
-        follow_up_question = response["ask_question"]
-        user_query = st.chat_input(follow_up_question)
-        question_response = get_response(user_query, recursion_depth + 1)
-        return AgentOutputParser(question_response).abatch()
+# Check if the model is asking for clarification or a follow-up question
+# if "ask_question" in response:
+#     follow_up_question = response["ask_question"]
+#     user_query = st.chat_input(follow_up_question)
+#     question_response = get_response(user_query, recursion_depth + 1)
+#     return AgentOutputParser(question_response).abatch()
 
-    # Check if the user input indicates a search intent
-    else:
-        search_results = get_search_response(user_input, llm, memory)
-        return f"Here are the search results for '{user_input}':\n\n{search_results}"
+# Check if the user input indicates a search intent
+# else:
+#     search_results = get_search_response(user_input, llm, memory)
+#     return search_results
 
-    # # If no specific intent is detected, return the model's response
-    # else:
-    #     regular_response = get_regular_response(user_input, llm, memory)
-    #     return AgentOutputParser(regular_response).abatch()
+# # If no specific intent is detected, return the model's response
+# else:
+#     regular_response = get_regular_response(user_input, llm, memory)
+#     return AgentOutputParser(regular_response).abatch()
 
-
+search_wrapper = DuckDuckGoSearchAPIWrapper(region="en-us", max_results=5)
 # Set up the DuckDuckGo search tool
-search_tool = DuckDuckGoSearchRun()
+search_tool = DuckDuckGoSearchRun(verbose=True, api_wrapper=search_wrapper)
 
 # Set up the search tools list
 search_tools = [
@@ -377,11 +383,8 @@ with chat_container:
         # If user inputs a new prompt, generate and draw a new response
         user_query = st.chat_input(
             "Type your message here",
-            # on_submit=with_clear_container, args=(True,)
         )
     if user_query is not None and user_query != "":
-        # Add user message to chat history
-        msgs.add_user_message(user_query)
         # Display user message in container
         chat_container.chat_message("user").write(user_query)
         # if "search" in user_query.lower():
