@@ -390,11 +390,6 @@ with chat_container:
         #     # Use the initialized conversation_rag_chain
         #     response = get_regular_response(user_query, conversation_rag_chain, memory)
 
-        # Add AI response to chat history
-        # msgs.add_ai_message(response)
-        # Display AI response in container
-        # st.chat_message("assistant", avatar="🦜").write(response)
-
         with st.spinner("Generating response..."):
             with chat_container.chat_message("ai"):
                 st_cb = StreamlitCallbackHandler(
