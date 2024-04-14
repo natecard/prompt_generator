@@ -304,16 +304,23 @@ def get_search_response(user_input, llm, memory):
         result = agent.invoke(
             user_input, search_quality_reflection=True, search_quality_score_threshold=4
         )
+        if "Final Answer" in result:
+            response = result["Final Answer"]
         # if "output" in result:
         #     response = result["output"]
         # else:
         #     response = (
         #         "I'm sorry, I couldn't find a satisfactory answer to your search query."
         #     )
-    except Exception as e:
-        logging.error(f"Error occurred while processing search query: {e}")
-        response = "I'm sorry, an error occurred while processing your search query. Please try again later."
-        return response
+
+    # Hack fix to stop the error "Could not parse LLM output: `" from being raised
+    except ValueError as e:
+        response = str(e)
+        if not response.startswith("Could not parse LLM output: `"):
+            raise e
+        response = response.removeprefix("Could not parse LLM output: `").removesuffix(
+            "`"
+        )
     return result
 
     # def get_regular_response(user_input, llm, memory):
