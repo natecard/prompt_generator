@@ -1,0 +1,21 @@
+# This file may be used to create an environment using:
+# $ conda create --name <env> --file <this file>
+# platform: osx-arm64
+
+chromadb=0.4.24=py312h81bd7bf_0
+duckduckgo-search=5.2.2=pypi_0
+huggingface_hub=0.22.2=pyhd8ed1ab_0
+langchain=0.1.14=pypi_0
+langchain-community=0.0.31=pypi_0
+langchain-core=0.1.40=pypi_0
+langchain-experimental=0.0.56=pypi_0
+langchain-text-splitters=0.0.1=pyhd8ed1ab_0
+langchainhub=0.1.15=pypi_0
+langsmith=0.1.38=pyhd8ed1ab_0
+ollama=0.1.30
+pip=24.0=pyhd8ed1ab_0
+python=3.12.2=hdf0ec26_0_cpython
+python-dotenv=1.0.1=pypi_0
+streamlit=1.32.0=py312hca03da5_0
+transformers=4.39.3=pyhd8ed1ab_0
+

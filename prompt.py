@@ -1,8 +1,8 @@
 from langchain.prompts import PromptTemplate
 
 
-def prompt_template(task, input, agent_scratchpad=""):
-    template = f"""Your goal is to improve the prompt given below for {task} : 
+def prompt_template(input, agent_scratchpad="" or []):
+    template = f"""Your goal is to improve the prompt given below: 
 --------------------
 Prompt: {input}
 --------------------
@@ -16,7 +16,7 @@ Example: "Welcome back, fellow history enthusiasts, to our channel! Today, we em
 -----
 Now, improve the prompt. Question: {input}
 
-Are followup questions needed here: {agent_scratchpad}"""
-    input_variables = ["input", "agent_scratchpad"]
-    prompt = PromptTemplate(template, input_variables)
+{"Are followup questions needed here: {agent_scratchpad}" if agent_scratchpad else ""}"""
+
+    prompt = PromptTemplate(template)
     return prompt
