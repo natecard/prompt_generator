@@ -2,8 +2,6 @@ from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from Model_Specific_Prompts.midjourney_prompt_guide import midjourney_prompt
 from Model_Specific_Prompts.stable_diffusion_prompt_guide import stable_diffusion_prompt
 
-midjourney = midjourney_prompt()
-
 
 def prompt_template(input, tools, tool_names, target_model_name):
     system = """Your goal is to improve the prompt given below: 
@@ -15,7 +13,8 @@ def prompt_template(input, tools, tool_names, target_model_name):
     If the prompt is for image creation such as Stable Diffusion or Midjourney, 
     then describe the artwork in great detail. If the image is a photograph or still frame photo then include the camera name, the resolution, if any adjustments should be present like exposure, filtering, focal length, the specific lens that is used to create the image.
     If it is a painting or computer generated image then include the style, the color palette, the brush strokes, the medium, the specific software that is used to create the image, or the era in which it was painted.
-    {midjourney}    
+    
+    {target_model_name}    
     
 
     -------------
@@ -100,6 +99,7 @@ def prompt_template(input, tools, tool_names, target_model_name):
     prompt = ChatPromptTemplate.from_messages(
         [
             ("system", system),
+            MessagesPlaceholder("target_model_name", optional=True),
             MessagesPlaceholder("chat_history", optional=True),
             ("human", human),
             MessagesPlaceholder("agent_scratchpad"),
