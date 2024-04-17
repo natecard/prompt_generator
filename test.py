@@ -60,8 +60,8 @@ if not langsmith_api_key:
     os.environ["LANGSMITH_API_KEY"] = langsmith_api_key
 
 # Initiate streamlit page
-st.set_page_config(page_title="RAG Chatbot", page_icon="🔗")
-st.title("RAG Chatbot")
+st.set_page_config(page_title="Prompt Chatbot", page_icon="🔗")
+st.title("Prompt Chatbot")
 
 
 # Set up memory
