@@ -10,8 +10,6 @@ from typing import List
 
 from langchain.agents import (
     AgentExecutor,
-    ConversationalChatAgent,
-    AgentOutputParser,
     create_json_chat_agent,
 )
 from langchain.chains.combine_documents import create_stuff_documents_chain
@@ -21,27 +19,22 @@ from langchain_community.callbacks.streamlit import StreamlitCallbackHandler
 from langchain_community.chat_message_histories import StreamlitChatMessageHistory
 from langchain_community.document_loaders import WebBaseLoader
 from langchain_community.embeddings import OllamaEmbeddings
-from langchain_community.llms import Ollama
 from langchain_community.chat_models import ChatOllama
 from langchain_community.tools import DuckDuckGoSearchRun
 from langchain_community.utilities import DuckDuckGoSearchAPIWrapper
 from langchain_community.vectorstores import Chroma
 from langchain_core.agents import AgentActionMessageLog, AgentFinish
 from langchain_core.prompts import (
-    PromptTemplate,
     ChatPromptTemplate,
     MessagesPlaceholder,
 )
 from langchain_core.runnables import RunnableConfig
 from langchain_core.pydantic_v1 import BaseModel, Field
-from langchain_core.output_parsers import StrOutputParser
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain.tools import Tool, BaseTool
 
 
-from prompt import prompt_template
-from clear_results import with_clear_container
 from Model_Specific_Prompts.midjourney_prompt_guide import midjourney_prompt
 
 load_dotenv()
@@ -51,8 +44,10 @@ langsmith_api_key = os.environ.get("LANGSMITH_API_KEY")
 hf_token = os.environ.get("HF_TOKEN")
 
 # Load the Ollama model and HF autotokenizer
-llm = ChatOllama(model="qwen:14b")
-tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen1.5-14B", token=hf_token)
+llm = ChatOllama(model="llama3:8b-instruct-q8_0")
+tokenizer = AutoTokenizer.from_pretrained(
+    "meta-llama/Meta-Llama-3-8B-Instruct", token=hf_token
+)
 
 # If the API key is not found in the environment, prompt the user to enter it
 if not langsmith_api_key:
@@ -229,69 +224,6 @@ def run_conversation(url=None):
         st.session_state.vector_store = get_vector_store(chunks)
 
 
-# Set a reasonable limit for recursion depth
-MAX_RECURSION_DEPTH = 5
-
-
-# def get_response(user_input, recursion_depth=0, url=None):
-# """
-# Generates a response based on the user input using the conversation RAG model.
-
-# Args:
-#     user_input (str): The user's input.
-#     recursion_depth (int, optional): The recursion depth to prevent infinite loops. Defaults to 0.
-
-# Returns:
-#     str: The generated response.
-
-# Raises:
-#     None
-
-# Notes:
-#     - If the recursion depth exceeds the limit, a default error message is returned.
-#     - The function uses the conversation RAG model to generate a response based on the user input.
-#     - If the model asks for clarification or a follow-up question, the user is prompted for input.
-#     - If the user input indicates a search intent, search results are returned.
-#     - If no specific intent is detected, the model's response is returned.
-# """
-# run_conversation(url)
-# # Check if the recursion depth has exceeded the limit
-# if recursion_depth >= MAX_RECURSION_DEPTH:
-#     return "I'm sorry, I'm having trouble understanding your query. Could you please rephrase it or provide more context?"
-
-# # Get the context retriever chain and conversation RAG chain
-# retriever_chain = get_context_retriever(st.session_state.vector_store)
-# conversation_rag_chain = get_conversation_rag_chain(retriever_chain)
-
-# # Generate response using the conversation RAG model
-# response = conversation_rag_chain.invoke(
-#     {
-#         # "chat_history": msgs.messages,
-#         "input": user_input,
-#     }
-# )
-# Uncomment if using the chain directly
-# output_parser = AgentOutputParser()
-# chain = retriever_chain | conversation_rag_chain | user_input | llm | output_parser
-# chain.invoke()
-
-# Check if the model is asking for clarification or a follow-up question
-# if "ask_question" in response:
-#     follow_up_question = response["ask_question"]
-#     user_query = st.chat_input(follow_up_question)
-#     question_response = get_response(user_query, recursion_depth + 1)
-#     return AgentOutputParser(question_response).abatch()
-
-# Check if the user input indicates a search intent
-# else:
-#     search_results = get_search_response(user_input, llm, memory)
-#     return search_results
-
-# # If no specific intent is detected, return the model's response
-# else:
-#     regular_response = get_regular_response(user_input, llm, memory)
-#     return AgentOutputParser(regular_response).abatch()
-
 search_wrapper = DuckDuckGoSearchAPIWrapper(region="en-us", max_results=5)
 # Set up the DuckDuckGo search tool
 search_tool = DuckDuckGoSearchRun(verbose=True, api_wrapper=search_wrapper)
@@ -324,6 +256,7 @@ def get_search_response(user_input, llm, memory, target_model_name):
         user_input (str): The search query provided by the user.
         llm: The language model used for generating the response.
         memory: The memory used by the conversational agent.
+        target_model_name (str): The name of the target model.
 
     Returns:
         Dict[str]: The response generated by the conversational agent.
@@ -372,43 +305,6 @@ def get_search_response(user_input, llm, memory, target_model_name):
         )
     return result
 
-    # def get_regular_response(user_input, llm, memory):
-    # """
-    # Get a regular response from the chat agent.
-
-    # Args:
-    #     user_input (str): The user's input/query.
-    #     llm: The language model used by the chat agent.
-    #     memory: The memory object used to store chat history.
-
-    # Returns:
-    #     str: The response generated by the chat agent.
-    # """
-    # chat_agent = ConversationalChatAgent.from_llm_and_tools(llm=llm, tools=rag_tools)
-
-    # agent = AgentExecutor.from_agent_and_tools(
-    #     tools=rag_tools,
-    #     agent=chat_agent,
-    #     llm=llm,
-    #     verbose=False,
-    #     memory=memory,
-    #     return_intermediate_steps=True,
-    #     handle_parsing_errors=True,
-    #     max_iterations=100,
-    #     max_execution_time=60,
-    #     output_parser=StrOutputParser(),
-    # )
-
-    # try:
-    #     input_data = {"chat_history": memory.chat_memory.messages, "input": user_input}
-    #     result = agent.run(input=input_data, tools=rag_tools)
-    #     response = result["output"]
-    # except Exception as e:
-    #     logging.error(f"Error occurred while processing regular query: {e}")
-    #     response = "I'm sorry, an error occurred while processing your query. Please try again later."
-
-    # return response
-
 
 chat_container = st.container()
 input_container = st.container()
@@ -428,7 +324,7 @@ with chat_container:
             "GPT 4",
             "Midjourney",
             "Stable Diffusion",
-            "Llama 2",
+            "Llama 3",
             "Gemini",
             # "Cohere Command R Plus",
             # "Gemma",

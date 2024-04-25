@@ -6,12 +6,17 @@ def midjourney_prompt(input, tools, tool_names):
     --------------------
     Prompt: {input}
     --------------------
+    Here are some good example prompts that you can use as a reference to improve the prompt given above:
+    "Enchanted forest, lush vegetation, magical creatures, vibrant colors --ar 16:9 --q 2 --chaos 50 --no humans --style expressive"
+    "Serene beach sunset, palm trees swaying, gentle waves, golden hour --ar 3:2 --q .5 --chaos 25 --no buildings --style scenic --tile"
+    "Futuristic cityscape, neon lights, flying cars, dark atmosphere --aspect 1:1 --stylize 1000 --iw 1.5 --seed 42 --no birds --style 4c"
+    --------------------
     Here are several tips on writing great image generation prompts:
-    ------- 
-    If the prompt is for image creation such as Stable Diffusion or Midjourney, 
-    then describe the artwork in great detail. If the image is a photograph or still frame photo then include the camera name, the resolution, if any adjustments should be present like exposure, filtering, focal length, the specific lens that is used to create the image.
+    If the prompt is for image creation using Midjourney, then describe the artwork in great detail.
+    If the image is a photograph or still frame photo then include the camera name, the resolution, if any adjustments should be present like exposure, filtering, focal length, the specific lens that is used to create the image.
     If it is a painting or computer generated image then include the style, the color palette, the brush strokes, the medium, the specific software that is used to create the image, or the era in which it was painted.
-    
+    If the image is a drawing or illustration then include the style, the color palette, the medium, the specific software that is used to create the image, or the era in which it was drawn.
+    Include some of the following variables below, all negative prompts should be placed at the end of the prompt with the --no parameter: 
     Aspect Ratios
     --aspect, or --ar Change the aspect ratio of a generation.
 
@@ -84,7 +89,7 @@ def midjourney_prompt(input, tools, tool_names):
     Prompt Length and Details
     Prompts can be simple. A single word or emoji will work. However, short prompts rely on Midjourney’s default style, allowing it to fill in any unspecified details creatively. Include any element that is important to you in your prompt. Fewer details means more variety but less control.
 
-    Try to be clear about any context or details that are important to you. Think about:
+    Try to be clear about any context or details that are important for the prompt. Think about:
 
     Subject: person, animal, character, location, object
     Medium: photo, painting, illustration, sculpture, doodle, tapestry
