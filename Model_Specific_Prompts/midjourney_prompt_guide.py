@@ -17,11 +17,12 @@ def midjourney_prompt(input, tools, tool_names):
     If it is a painting or computer generated image then include the style, the color palette, the brush strokes, the medium, the specific software that is used to create the image, or the era in which it was painted.
     If the image is a drawing or illustration then include the style, the color palette, the medium, the specific software that is used to create the image, or the era in which it was drawn.
     Include some of the following variables below, all negative prompts should be placed at the end of the prompt with the --no parameter: 
+    --------------------
     Aspect Ratios
     --aspect, or --ar Change the aspect ratio of a generation.
 
     Chaos
-    --chaos <number 0–100> Change how varied the results will be. Higher values produce more unusual and unexpected generations.
+    --chaos <number 0-100> Change how varied the results will be. Higher values produce more unusual and unexpected generations.
 
     Character Reference
     Use images as character references in your prompt to create images of the same character in different situations.
@@ -30,7 +31,7 @@ def midjourney_prompt(input, tools, tool_names):
     --fast override your current setting and run a single job using Fast Mode.
 
     Image Weight
-    --iw <0–2> Sets image prompt weight relative to text weight. The default value is 1.
+    --iw <0-2> Sets image prompt weight relative to text weight. The default value is 1.
 
     No
     --no Negative prompting, --no plants would try to remove plants from the image.
@@ -45,13 +46,13 @@ def midjourney_prompt(input, tools, tool_names):
     --relax override your current setting and run a single job using Relax Mode.
 
     Repeat
-    --repeat <1–40>, or --r <1–40> Create multiple Jobs from a single prompt. --repeat is useful for quickly rerunning a job multiple times.
+    --repeat <1-40>, or --r <1-40> Create multiple Jobs from a single prompt. --repeat is useful for quickly rerunning a job multiple times.
 
     Seed
-    --seed <integer between 0–4294967295> The Midjourney bot uses a seed number to create a field of visual noise, like television static, as a starting point to generate the initial image grids. Seed numbers are generated randomly for each image but can be specified with the --seed or --sameseed parameter. Using the same seed number and prompt will produce similar ending images.
+    --seed <integer between 0-4294967295> The Midjourney bot uses a seed number to create a field of visual noise, like television static, as a starting point to generate the initial image grids. Seed numbers are generated randomly for each image but can be specified with the --seed or --sameseed parameter. Using the same seed number and prompt will produce similar ending images.
 
     Stop
-    --stop <integer between 10–100> Use the --stop parameter to finish a Job partway through the process. Stopping a Job at an earlier percentage can create blurrier, less detailed results.
+    --stop <integer between 10-100> Use the --stop parameter to finish a Job partway through the process. Stopping a Job at an earlier percentage can create blurrier, less detailed results.
 
     Style
     --style <raw> Switch between versions of the Midjourney Model Version 5.1 and 5.2.
@@ -75,7 +76,7 @@ def midjourney_prompt(input, tools, tool_names):
     --video Saves a progress video of the initial image grid being generated. Emoji react to the completed image grid with ✉️ to trigger the video being sent to your direct messages. --video does not work when upscaling an image.
 
     Weird
-    --weird <number 0–3000>, or --w <number 0–3000> Explore unusual aesthetics with the experimental --weird parameter.
+    --weird <number 0-3000>, or --w <number 0-3000> Explore unusual aesthetics with the experimental --weird parameter.
 
     Word Choice
     Word choice matters. More specific synonyms work better in many circumstances. Instead of big, try tiny, huge, gigantic, enormous, or immense.
