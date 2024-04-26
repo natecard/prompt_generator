@@ -44,9 +44,9 @@ langsmith_api_key = os.environ.get("LANGSMITH_API_KEY")
 hf_token = os.environ.get("HF_TOKEN")
 
 # Load the Ollama model and HF autotokenizer
-llm = ChatOllama(model="llama3:8b-instruct-q8_0")
+llm = ChatOllama(model="phi3:instruct")
 tokenizer = AutoTokenizer.from_pretrained(
-    "meta-llama/Meta-Llama-3-8B-Instruct", token=hf_token
+    "microsoft/Phi-3-mini-128k-instruct", token=hf_token
 )
 
 # If the API key is not found in the environment, prompt the user to enter it

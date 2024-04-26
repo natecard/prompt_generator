@@ -130,8 +130,10 @@ def midjourney_prompt(input, tools, tool_names):
     Thought: I now know the final answer
     Final Answer: the best prompt for the original input prompt
 
-    Begin! Reminder to always use the exact characters `Final Answer` when responding.
-    Now, improve the prompt. Prompt: {input}
+    Begin! 
+    
+    Major Reminder to always use the exact characters `Final Answer` when responding.
+    Now, improve the prompt. Remember to always use the exact characters 'Final Answer' when responding. Prompt: {input}
     """
 
     human = """
