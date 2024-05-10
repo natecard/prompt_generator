@@ -38,8 +38,8 @@ langsmith_api_key = os.environ.get("LANGSMITH_API_KEY")
 hf_token = os.environ.get("HF_TOKEN")
 
 # Load the Ollama model and HF autotokenizer
-llm = ChatOllama(model="qwen:14b")
-tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen1.5-14B", token=hf_token)
+llm = ChatOllama(model="llama3:8b-instruct-q8_0")
+tokenizer = AutoTokenizer.from_pretrained("meta-llama/Meta-Llama-3-8B-Instruct", token=hf_token)
 
 # If the API key is not found in the environment, prompt the user to enter it
 if not langsmith_api_key:
@@ -47,8 +47,8 @@ if not langsmith_api_key:
     os.environ["LANGSMITH_API_KEY"] = langsmith_api_key
 
 # Initiate streamlit page
-st.set_page_config(page_title="RAG Chatbot", page_icon="🔗")
-st.title("RAG Chatbot")
+st.set_page_config(page_title="Prompt Chatbot", page_icon="🔗")
+st.title("Prompt Chatbot")
 
 
 # Set up memory
@@ -56,7 +56,7 @@ msgs = StreamlitChatMessageHistory(key="chat_history")
 if len(msgs.messages) == 0:
     st.session_state.steps = {}
     msgs.add_ai_message(
-        "How can I help you? You can ask me questions or search for information."
+        "How can I help you? You can ask me questions or I can help you craft a better prompt for LLMs."
     )
 
 # Buffer for storing chat history using the StreamlitChatMessageHistory
