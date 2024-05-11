@@ -11,6 +11,7 @@ from typing import List
 from langchain.agents import (
     AgentExecutor,
     create_json_chat_agent,
+    ConversationalChatAgent
 )
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain.chains import create_history_aware_retriever, create_retrieval_chain
@@ -22,8 +23,8 @@ from langchain_community.embeddings import OllamaEmbeddings
 from langchain_community.chat_models import ChatOllama
 from langchain_community.tools import DuckDuckGoSearchRun
 from langchain_community.utilities import DuckDuckGoSearchAPIWrapper
-from langchain_community.vectorstores import Chroma
-from langchain_core.agents import AgentActionMessageLog, AgentFinish
+from langchain_community.vectorstores import FAISS
+from langchain_core.agents import AgentActionMessageLog, AgentFinish 
 from langchain_core.prompts import (
     ChatPromptTemplate,
     MessagesPlaceholder,
@@ -36,6 +37,7 @@ from langchain.tools import Tool, BaseTool
 
 
 from Model_Specific_Prompts.midjourney_prompt_guide import midjourney_prompt
+from Model_Specific_Prompts.gpt_4_prompt_guide import gpt_4_prompt
 
 load_dotenv()
 logging.basicConfig(level=logging.DEBUG)
@@ -44,9 +46,9 @@ langsmith_api_key = os.environ.get("LANGSMITH_API_KEY")
 hf_token = os.environ.get("HF_TOKEN")
 
 # Load the Ollama model and HF autotokenizer
-llm = ChatOllama(model="phi3:instruct")
+llm = ChatOllama(model="llama3:8b-instruct-q8_0")
 tokenizer = AutoTokenizer.from_pretrained(
-    "microsoft/Phi-3-mini-128k-instruct", token=hf_token
+    "meta-llama/Meta-Llama-3-8B-Instruct", token=hf_token
 )
 
 # If the API key is not found in the environment, prompt the user to enter it
@@ -93,14 +95,10 @@ def chunk_text(text):
     chunks = splitter.split_documents(text)
     return chunks
 
-
 # Initialize the OllamaEmbeddings and FAISS vector store
 def get_vector_store(chunks):
-    embeddings = OllamaEmbeddings()
-    vector_store = Chroma.from_documents(
-        documents=chunks, embedding=embeddings, persist_directory="VDB_DIR"
-    )
-    vector_store.persist()
+    embeddings = OllamaEmbeddings(model="llama3:8b-instruct-q8_0")
+    vector_store = FAISS.from_documents(chunks, embeddings)
     return vector_store
 
 
@@ -110,9 +108,8 @@ def get_context_retriever(vector_store):
     contextualize_q_system_prompt = """Given a chat history and the latest user question \
         which might reference context in the chat history, formulate a standalone question \
         which can be understood without the chat history. Do NOT answer the question, \
-        just reformulate it if needed and otherwise return it as is.\n\n\
-        {msgs.messages}"""
-
+        just reformulate it if needed and otherwise return it as is.\n\n
+        """
     contextualize_q_prompt = ChatPromptTemplate.from_messages(
         [
             ("ai", contextualize_q_system_prompt),
@@ -127,10 +124,6 @@ def get_context_retriever(vector_store):
 
 
 def get_conversation_rag_chain(history_aware_retriever_chain):
-    # qa_system_prompt = """You are an assistant for question-answering and retrieval augmented tasks. \
-    #     Use the following pieces of retrieved context to answer the question. \
-    #     If you don't know the answer, just say that you don't know.\n\n\
-    #     """
 
     qa_prompt = ChatPromptTemplate.from_messages(
         [
@@ -140,9 +133,7 @@ def get_conversation_rag_chain(history_aware_retriever_chain):
         ]
     )
     document_chain = create_stuff_documents_chain(llm, qa_prompt)
-    return create_retrieval_chain(
-        retriever=history_aware_retriever_chain, combine_docs_chain=document_chain
-    )
+    return create_retrieval_chain(history_aware_retriever_chain, document_chain)
 
 
 class Response(BaseModel):
@@ -204,24 +195,28 @@ rag_tools = [
 ]
 
 
-def run_conversation(url=None):
-    if "vector_store" not in st.session_state:
-        if url is not None and url != "":
-            docs = get_loader(url)
-            chunks = chunk_text(docs)
-            st.session_state.vector_store = get_vector_store(chunks)
-        # history_aware_retriever_chain = get_context_retriever(
-        #     st.session_state.vector_store
-        # )
-        # conversation_rag_chain = get_conversation_rag_chain(
-        #     history_aware_retriever_chain
-        # )
-        # return conversation_rag_chain
-    else:
-        url = "https://en.wikipedia.org/wiki/Main_Page"
-        docs = get_loader(url)
-        chunks = chunk_text(docs)
-        st.session_state.vector_store = get_vector_store(chunks)
+def run_conversation(url):
+    if url is not None and url != "":
+        # if "vector_store" not in st.session_state:
+            # try:
+                docs = get_loader(url)
+                chunks = chunk_text(docs)
+                st.session_state.vector_store = get_vector_store(chunks)
+
+                history_aware_retriever_chain = get_context_retriever(
+                        st.session_state.vector_store
+                )
+                conversation_rag_chain = get_conversation_rag_chain(
+                        history_aware_retriever_chain
+                )
+                return conversation_rag_chain
+            # except Exception as e:
+                # st.error(f"Error loading documents: {e}")
+        # else:
+        #     url = "https://en.wikipedia.org/wiki/Main_Page"
+        #     docs = get_loader(url)
+        #     chunks = chunk_text(docs)
+        #     st.session_state.vector_store = get_vector_store(chunks)
 
 
 search_wrapper = DuckDuckGoSearchAPIWrapper(region="en-us", max_results=5)
@@ -263,6 +258,8 @@ def get_search_response(user_input, llm, memory, target_model_name):
     """
     if target_model_name == "midjourney":
         search_tool_prompt = midjourney_prompt(user_input, search_tools, "Search")
+    if target_model_name == "gpt_4":
+        search_tool_prompt = gpt_4_prompt(user_input, search_tools, "Search")
         chat_agent = create_json_chat_agent(
             llm=llm, tools=search_tools, prompt=search_tool_prompt
         )
@@ -305,6 +302,35 @@ def get_search_response(user_input, llm, memory, target_model_name):
         )
     return result
 
+def get_regular_response(user_input, llm, memory):
+    chat_agent = ConversationalChatAgent.from_llm_and_tools(llm=llm, tools=rag_tools)
+
+    agent = AgentExecutor.from_agent_and_tools(
+        tools=rag_tools,
+        agent=chat_agent,
+        llm=llm,
+        verbose=False,
+        memory=memory,
+        handle_parsing_errors=True,
+    )
+
+    try:
+        result = agent.invoke(
+            input=user_input,
+            chat_history=memory,  
+            tools=["rag"],
+        )
+        if "output" in result:
+            response = result["output"]
+        else:
+            response = "I'm sorry, I couldn't find a satisfactory answer to your query."
+    except Exception as e:
+        logging.error(f"Error occurred while processing regular query: {e}")
+        response = "I'm sorry, an error occurred while processing your query. Please try again later."
+
+    return response
+
+
 
 chat_container = st.container()
 input_container = st.container()
@@ -322,10 +348,10 @@ with chat_container:
         "Select the model you want the prompt to be optimized for...",
         (
             "GPT 4",
-            "Midjourney",
-            "Stable Diffusion",
             "Llama 3",
-            "Gemini",
+            # "Stable Diffusion",
+            # "Gemini",
+            # "Midjourney",
             # "Cohere Command R Plus",
             # "Gemma",
             # "Mistral",
@@ -333,7 +359,8 @@ with chat_container:
             # "Qwen",
             # "Nous Research",
         ),
-        index=1,
+        # set default to GPT 4
+        index=0,
         placeholder="Choose a model",
     )
 
@@ -360,12 +387,11 @@ with chat_container:
         )
     if user_query is not None and user_query != "":
         # Display user message in container
-        chat_container.chat_message("user").write(user_query)
+        # chat_container.chat_message("user").write(user_query)
         # if "search" in user_query.lower():
-        # response: Response = get_search_response(user_query, llm, memory)
+        #     response: Response = get_search_response(user_query, llm, memory)
         # else:
-        #     # Use the initialized conversation_rag_chain
-        #     response = get_regular_response(user_query, conversation_rag_chain, memory)
+            # Use the initialized conversation_rag_chain
 
         with st.spinner("Generating response..."):
             with chat_container.chat_message("ai"):
@@ -374,9 +400,10 @@ with chat_container:
                 )
                 cfg = RunnableConfig()
                 cfg["callbacks"] = [st_cb]
-                response = get_search_response(
-                    user_query, llm, memory, target_model_name=target_model_name
-                )
+                response = get_regular_response(user_query, conversation_rag_chain, memory)
+                # response = get_search_response(
+                #     user_query, llm, memory, target_model_name=target_model_name
+                # )
                 st.write(response["output"])
                 st.session_state.steps[str(len(msgs.messages) - 1)] = response[
                     "intermediate_steps"
