@@ -14,7 +14,8 @@ from langchain.agents import (
     ConversationalChatAgent
 )
 from langchain.chains.combine_documents import create_stuff_documents_chain
-from langchain.chains import create_history_aware_retriever, create_retrieval_chain
+from langchain.chains.history_aware_retriever import create_history_aware_retriever
+from langchain.chains.retrieval import create_retrieval_chain
 from langchain.memory import ConversationBufferMemory
 from langchain_community.callbacks.streamlit import StreamlitCallbackHandler
 from langchain_community.chat_message_histories import StreamlitChatMessageHistory
@@ -23,11 +24,12 @@ from langchain_community.embeddings import OllamaEmbeddings
 from langchain_community.chat_models import ChatOllama
 from langchain_community.tools import DuckDuckGoSearchRun
 from langchain_community.utilities import DuckDuckGoSearchAPIWrapper
-from langchain_community.vectorstores import FAISS
+from langchain_chroma import Chroma
 from langchain_core.agents import AgentActionMessageLog, AgentFinish 
+from langchain_core.prompts import StructuredPrompt
 from langchain_core.prompts import (
     ChatPromptTemplate,
-    MessagesPlaceholder,
+    MessagesPlaceholder
 )
 from langchain_core.runnables import RunnableConfig
 from langchain_core.pydantic_v1 import BaseModel, Field
@@ -98,11 +100,11 @@ def chunk_text(text):
 # Initialize the OllamaEmbeddings and FAISS vector store
 def get_vector_store(chunks):
     embeddings = OllamaEmbeddings(model="llama3:8b-instruct-q8_0")
-    vector_store = FAISS.from_documents(chunks, embeddings)
+    vector_store = Chroma.from_documents(chunks, embeddings)
     return vector_store
 
 
-def get_context_retriever(vector_store):
+def get_context_retriever(vector_store: Chroma):
     retriever = vector_store.as_retriever()
     # This should be able to retrieve the context from the chat history via the msgs.messages
     contextualize_q_system_prompt = """Given a chat history and the latest user question \
