@@ -24,9 +24,8 @@ from langchain_community.embeddings import OllamaEmbeddings
 from langchain_community.chat_models import ChatOllama
 from langchain_community.tools import DuckDuckGoSearchRun
 from langchain_community.utilities import DuckDuckGoSearchAPIWrapper
-from langchain_chroma import Chroma
-from langchain_core.agents import AgentActionMessageLog, AgentFinish 
-from langchain_core.prompts import StructuredPrompt
+from langchain_community.utilities import Chroma
+from langchain_core.agents import AgentActionMessageLog, AgentFinish
 from langchain_core.prompts import (
     ChatPromptTemplate,
     MessagesPlaceholder
@@ -319,7 +318,7 @@ def get_regular_response(user_input, llm, memory):
     try:
         result = agent.invoke(
             input=user_input,
-            chat_history=memory,  
+            chat_history=memory,
             tools=["rag"],
         )
         if "output" in result:
